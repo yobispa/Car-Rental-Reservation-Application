@@ -1,20 +1,119 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Hello QuestController!{% endblock %}
-
+{% block title %}Available Vehicles{% endblock %}
+{# AI helped with the UI design #}
 {% block body %}
-<style>
-    .example-wrapper { margin: 1em auto; max-width: 800px; width: 95%; font: 18px/1.5 sans-serif; }
-    .example-wrapper code { background: #F5F5F5; padding: 2px 6px; }
-</style>
+<main class="bg-light min-vh-100">
+    <section class="py-5 border-bottom bg-white">
+        <div class="container">
+            <div class="row align-items-center g-4">
+                <div class="col-lg-8">
+                    <span class="badge text-bg-primary mb-3">Car Rental Fleet</span>
+                    <h1 class="display-5 fw-bold mb-3">Choose your next rental vehicle</h1>
+                    <p class="lead text-secondary mb-0">
+                        Browse comfortable minivans, efficient sedans, and fun convertibles ready for reservation.
+                    </p>
+                </div>
+                <div class="col-lg-4">
+                    <div class="row g-3 text-center">
+                        <div class="col-6">
+                            <div class="p-3 rounded border bg-light">
+                                <div class="fs-3 fw-bold">{{ cars|length }}</div>
+                                <div class="small text-uppercase text-secondary">Vehicles</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 rounded border bg-light">
+                                <div class="fs-3 fw-bold">3</div>
+                                <div class="small text-uppercase text-secondary">Classes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-<div class="example-wrapper">
-    <h1>Hello {{ controller_name }}! ✅</h1>
+    <section class="py-5">
+        <div class="container">
+            {% if cars is empty %}
+                <div class="alert alert-info mb-0" role="alert">
+                    No vehicles are available yet.
+                </div>
+            {% else %}
+                <div class="row g-4">
+                    {% for car in cars %}
+                        <div class="col-md-6 col-xl-4">
+                            <article class="card h-100 border-0 shadow-sm">
+                                <div class="ratio ratio-16x9 bg-body-secondary rounded-top">
+                                    <img
+                                        src="{{ asset('images/' ~ car.imageFilename) }}"
+                                        class="img-fluid object-fit-contain p-3"
+                                        alt="{{ car.make }} {{ car.model }}"
+                                    >
+                                </div>
 
-    This friendly message is coming from:
-    <ul>
-        <li>Your controller at <code>C:/Users/yoand/OneDrive/Documentos/Car-Rental-Reservation-Application/src/Controller/QuestController.php</code></li>
-        <li>Your template at <code>C:/Users/yoand/OneDrive/Documentos/Car-Rental-Reservation-Application/templates/quest/index.html.twig</code></li>
-    </ul>
-</div>
+                                <div class="card-body d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                        <div>
+                                            <p class="small text-secondary mb-1">{{ car.code }}</p>
+                                            <h2 class="h5 card-title mb-0">{{ car.make }} {{ car.model }}</h2>
+                                        </div>
+                                        <span class="badge text-bg-success">{{ car.status|title }}</span>
+                                    </div>
+
+                                    <div class="d-flex flex-wrap gap-2 mb-4">
+                                        <span class="badge rounded-pill text-bg-primary">{{ car.category|title }}</span>
+                                        <span class="badge rounded-pill text-bg-light border text-secondary">{{ car.modelYear }}</span>
+                                        <span class="badge rounded-pill text-bg-light border text-secondary">{{ car.color }}</span>
+                                    </div>
+
+                                    <div class="row g-3 mb-4 text-center">
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-light">
+                                                <div class="fw-semibold">{{ car.seats }}</div>
+                                                <div class="small text-secondary">Seats</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-light">
+                                                <div class="fw-semibold">{{ car.doors }}</div>
+                                                <div class="small text-secondary">Doors</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="border rounded p-2 bg-light">
+                                                <div class="fw-semibold">{{ car.luggageCapacity }}</div>
+                                                <div class="small text-secondary">Bags</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <ul class="list-group list-group-flush mb-4">
+                                        <li class="list-group-item px-0 d-flex justify-content-between">
+                                            <span class="text-secondary">Transmission</span>
+                                            <span class="fw-medium">{{ car.transmission|title }}</span>
+                                        </li>
+                                        <li class="list-group-item px-0 d-flex justify-content-between">
+                                            <span class="text-secondary">Fuel type</span>
+                                            <span class="fw-medium">{{ car.fuelType|title }}</span>
+                                        </li>
+                                    </ul>
+
+                                    <div class="mt-auto d-flex justify-content-between align-items-center pt-2">
+                                        <div>
+                                            <span class="fs-4 fw-bold">${{ car.dailyBasePrice|number_format(2) }}</span>
+                                            <span class="text-secondary">/ day</span>
+                                        </div>
+                                        <a href="#" class="btn btn-primary">Reserve</a>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </section>
+</main>
 {% endblock %}
