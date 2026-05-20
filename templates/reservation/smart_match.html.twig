@@ -1,0 +1,131 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Smart Match{% endblock %}
+{# ai helped with the UI design #}
+{% block body %}
+<main class="bg-light min-vh-100 py-5">
+    <div class="container">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4 p-lg-5">
+                <span class="badge text-bg-primary mb-3">Smart Match</span>
+                <h1 class="h3 mb-2">Find available cars</h1>
+                <p class="text-secondary">
+                    Enter the number of passengers and rental dates. We will show available cars sorted by the best estimated price.
+                </p>
+
+                <form method="get" action="{{ path('app_reservation_auto') }}" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="numberOfPersons" class="form-label">Number of persons</label>
+                        <input
+                            type="number"
+                            id="numberOfPersons"
+                            name="numberOfPersons"
+                            value="{{ search.numberOfPersons }}"
+                            min="1"
+                            class="form-control"
+                            required
+                        >
+                    </div>
+                    <div class="col-md-4">
+                        <label for="startDate" class="form-label">Start date</label>
+                        <input
+                            type="date"
+                            id="startDate"
+                            name="startDate"
+                            value="{{ search.startDate }}"
+                            class="form-control"
+                            required
+                        >
+                    </div>
+                    <div class="col-md-4">
+                        <label for="endDate" class="form-label">End date</label>
+                        <input
+                            type="date"
+                            id="endDate"
+                            name="endDate"
+                            value="{{ search.endDate }}"
+                            class="form-control"
+                            required
+                        >
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">Show available cars</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if availableOptions is not empty %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0">Available cars</h2>
+                <span class="badge text-bg-success">{{ availableOptions|length }} found</span>
+            </div>
+
+            <div class="row g-4">
+                {% for option in availableOptions %}
+                    {% set car = option.car %}
+                    <div class="col-md-6 col-xl-4">
+                        <article class="card h-100 border-0 shadow-sm">
+                            <div class="ratio ratio-16x9 bg-body-secondary rounded-top">
+                                <img
+                                    src="{{ asset('images/' ~ car.imageFilename) }}"
+                                    class="img-fluid object-fit-contain p-3"
+                                    alt="{{ car.make }} {{ car.model }}"
+                                >
+                            </div>
+
+                            <div class="card-body d-flex flex-column">
+                                <span class="badge text-bg-primary align-self-start mb-3">{{ car.category|title }}</span>
+                                <h3 class="h5">{{ car.make }} {{ car.model }}</h3>
+                                <p class="text-secondary">{{ car.seats }} seats - {{ car.transmission|title }} - {{ car.fuelType|title }}</p>
+
+                                <div class="mt-auto d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="fs-5 fw-bold">${{ option.totalPrice|number_format(2) }}</span>
+                                        <span class="text-secondary">estimated</span>
+                                        <div class="mt-1">
+                                            {% if option.priceIncreaseText == 'No price increase' %}
+                                                <span class="badge text-bg-success">{{ option.priceIncreaseText }}</span>
+                                            {% else %}
+                                                <span class="badge text-bg-warning">{{ option.priceIncreaseText }}</span>
+                                                <small class="text-secondary d-block">
+                                                    Normal price: ${{ option.basePrice|number_format(2) }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <a
+                                        href="{{ path('app_reservation_new', { id: car.id }) }}"
+                                        class="btn btn-primary"
+                                    >
+                                        Reserve this car
+                                    </a>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                {% endfor %}
+            </div>
+        {% elseif search.numberOfPersons and search.startDate and search.endDate %}
+            <div class="alert alert-warning" role="alert">
+                <h2 class="h5">No cars are available for those dates.</h2>
+                {% if alternativeDates is not empty %}
+                    <p class="mb-2">Try one of these alternatives:</p>
+                    <ul class="mb-0">
+                        {% for alternative in alternativeDates %}
+                            <li>
+                                {{ alternative.startDate|date('M j, Y') }} to {{ alternative.endDate|date('M j, Y') }}
+                                with {{ alternative.car.make }} {{ alternative.car.model }}
+                                for about ${{ alternative.totalPrice|number_format(2) }}
+                                <span class="badge text-bg-secondary">{{ alternative.priceIncreaseText }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="mb-0">Try changing the number of passengers or choosing a later date range.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</main>
+{% endblock %}

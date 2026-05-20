@@ -3,7 +3,7 @@
 {% block title %}Reserve {{ car.make }} {{ car.model }}{% endblock %}
 
 {% block body %}
-{# AI helped with the UI design #}
+{# ai helped with the UI design #}
 <main class="bg-light min-vh-100 py-5">
     <div class="container">
         <div class="row g-4">
@@ -19,7 +19,7 @@
                     <div class="card-body">
                         <span class="badge text-bg-primary mb-3">{{ car.category|title }}</span>
                         <h1 class="h4 mb-2">{{ car.make }} {{ car.model }}</h1>
-                        <p class="text-secondary mb-4">{{ car.modelYear }} • {{ car.color }}</p>
+                        <p class="text-secondary mb-4">{{ car.modelYear }} - {{ car.color }}</p>
 
                         <div class="row g-2 text-center mb-4">
                             <div class="col-4">
@@ -44,7 +44,15 @@
 
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="text-secondary">Daily price</span>
-                            <span class="fs-4 fw-bold">${{ car.dailyBasePrice|number_format(2) }}</span>
+                            <span class="fs-4 fw-bold" id="dailyPrice" data-base-price="{{ car.dailyBasePrice }}">
+                                ${{ car.dailyBasePrice|number_format(2) }}
+                            </span>
+                        </div>
+                        <div class="mt-2 text-end">
+                            <span class="badge text-bg-success" id="priceIncreaseBadge">No price increase</span>
+                            <small class="text-secondary d-block d-none" id="normalDailyPrice">
+                                Normal daily price: ${{ car.dailyBasePrice|number_format(2) }}
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -55,7 +63,7 @@
                     <div class="card-body p-4 p-lg-5">
                         <div class="mb-4">
                             <span class="badge text-bg-success mb-3">1 to 30 days</span>
-                            <h2 class="h3 mb-2">Reservation details</h2>
+                            <h2 class="h3 mb-2">Reserve this car</h2>
                             <p class="text-secondary mb-0">
                                 Enter the customer information, number of persons, and rental dates.
                             </p>
@@ -99,4 +107,40 @@
         </div>
     </div>
 </main>
+
+<script>
+    const startDateInput = document.getElementById('{{ reservationForm.startDate.vars.id }}');
+    const dailyPrice = document.getElementById('dailyPrice');
+    const priceIncreaseBadge = document.getElementById('priceIncreaseBadge');
+    const normalDailyPrice = document.getElementById('normalDailyPrice');
+    const basePrice = Number(dailyPrice.dataset.basePrice);
+
+    function updateDailyPrice() {
+        const startDate = new Date(startDateInput.value);
+        const month = startDate.getMonth() + 1;
+        let newPrice = basePrice;
+        let badgeText = 'No price increase';
+        let badgeClass = 'badge text-bg-success';
+
+        if ([6, 7, 8].includes(month)) {
+            newPrice = basePrice * 1.20;
+            badgeText = 'Summer +20%';
+            badgeClass = 'badge text-bg-warning';
+        }
+
+        if (month === 12) {
+            newPrice = basePrice * 1.15;
+            badgeText = 'December +15%';
+            badgeClass = 'badge text-bg-warning';
+        }
+
+        dailyPrice.textContent = '$' + newPrice.toFixed(2);
+        priceIncreaseBadge.textContent = badgeText;
+        priceIncreaseBadge.className = badgeClass;
+        normalDailyPrice.classList.toggle('d-none', newPrice === basePrice);
+    }
+
+    startDateInput.addEventListener('change', updateDailyPrice);
+    updateDailyPrice();
+</script>
 {% endblock %}
