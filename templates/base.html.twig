@@ -56,13 +56,32 @@
                             <a class="nav-link px-lg-3" href="#">Contact</a>
                         </li>
                     </ul>
-                    <form class="d-flex gap-2" role="search">
+                    <div class="d-flex flex-column flex-lg-row gap-2">
+                        {% if app.user %}
+                            <span class="navbar-text small text-white-50 me-lg-2">{{ app.user.userIdentifier }}</span>
+                            <a href="{{ path('app_logout') }}" class="btn btn-outline-light btn-sm px-3">Logout</a>
+                        {% else %}
+                            <a href="{{ path('app_login') }}" class="btn btn-outline-light btn-sm px-3">Login</a>
+                            <a href="{{ path('app_register') }}" class="btn btn-primary btn-sm px-3">Register</a>
+                        {% endif %}
+                    </div>
+                    <form class="d-flex gap-2 ms-lg-3 mt-3 mt-lg-0" role="search">
                         <input class="form-control form-control-sm" type="search" placeholder="Search vehicles" aria-label="Search vehicles">
                         <button class="btn btn-primary btn-sm px-3" type="submit">Search</button>
                     </form>
                 </div>
             </div>
         </nav>
+        <div class="container mt-3">
+            {% for label, messages in app.flashes %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ label }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
         {% block body %}{% endblock %}
     </body>
 </html>

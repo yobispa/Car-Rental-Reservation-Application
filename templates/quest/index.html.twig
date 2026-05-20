@@ -105,7 +105,7 @@
                                             <span class="fs-4 fw-bold">${{ car.dailyBasePrice|number_format(2) }}</span>
                                             <span class="text-secondary">/ day</span>
                                         </div>
-                                        <a href="#" class="btn btn-primary">Reserve</a>
+                                        <a href="{{ path('app_reservation_new', { id: car.id }) }}" class="btn btn-primary">Reserve</a>
                                     </div>
                                 </div>
                             </article>

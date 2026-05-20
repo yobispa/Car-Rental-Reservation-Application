@@ -32,7 +32,6 @@ class Reservation
 
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: false)]
-    #[Assert\NotNull]
     private ?Customer $customer = null;
 
     #[ORM\ManyToOne]
