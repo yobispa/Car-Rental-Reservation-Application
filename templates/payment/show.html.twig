@@ -31,7 +31,7 @@
                     <div class="alert alert-info">
                         Your payment is still pending or processing. Please do not start another payment.
                     </div>
-                {% elseif reservation.paymentStatus in ['rejected', 'cancelled', 'failed'] %}
+                {% elseif reservation.paymentStatus in ['rejected', 'cancelled', 'failed', 'expired'] %}
                     <div class="alert alert-warning">
                         The payment was {{ reservation.paymentStatus }}.
                         {% if reservation.paymentMessage %}
@@ -68,7 +68,7 @@
                         <a href="{{ reservation.sentooPaymentUrl }}" class="btn btn-primary">Continue payment</a>
                     {% endif %}
 
-                    {% if reservation.paymentStatus in ['rejected', 'cancelled', 'failed'] %}
+                    {% if reservation.paymentStatus in ['rejected', 'cancelled', 'failed', 'expired'] %}
                         <form method="post" action="{{ path('app_payment_retry', { id: reservation.id }) }}">
                             <input type="hidden" name="_token" value="{{ csrf_token('retry_payment_' ~ reservation.id) }}">
                             <button type="submit" class="btn btn-primary">Try payment again</button>

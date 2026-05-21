@@ -11,6 +11,7 @@ use App\Repository\CarRepository;
 use App\Repository\ReservationRepository;
 use App\Service\SentooPaymentService;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -167,7 +168,8 @@ class ReservationController extends AbstractController
         Reservation $reservation,
         Request $request,
         EntityManagerInterface $entityManager,
-        SentooPaymentService $sentooPaymentService
+        SentooPaymentService $sentooPaymentService,
+        LoggerInterface $logger
     ): Response
     {
         if ($reservation->getSentooTransactionId()) {
@@ -176,6 +178,11 @@ class ReservationController extends AbstractController
                 $this->updatePaymentStatus($reservation, $paymentStatus['status'], $paymentStatus['message']);
                 $entityManager->flush();
             } catch (\Throwable $exception) {
+                $logger->error('Could not check Sentoo payment status after return.', [
+                    'reservationId' => $reservation->getId(),
+                    'error' => $exception->getMessage(),
+                ]);
+
                 $this->addFlash('danger', 'Could not check the payment status right now.');
             }
         }
@@ -184,6 +191,58 @@ class ReservationController extends AbstractController
             'reservation' => $reservation,
             'attempt' => $request->query->get('attempt'),
         ]);
+    }
+
+    #[Route('/sentoo/webhook', name: 'app_sentoo_webhook', methods: ['POST'])]
+    public function sentooWebhook(
+        Request $request,
+        ReservationRepository $reservationRepository,
+        EntityManagerInterface $entityManager,
+        SentooPaymentService $sentooPaymentService,
+        LoggerInterface $logger
+    ): Response
+    {
+        $transactionId = $request->request->get('transaction_id');
+
+        if (!$transactionId) {
+            $logger->warning('Sentoo webhook received without transaction_id.');
+
+            return new Response('success');
+        }
+
+        $reservation = $reservationRepository->findOneBy([
+            'sentooTransactionId' => $transactionId,
+        ]);
+
+        if (!$reservation) {
+            $logger->warning('Sentoo webhook received for an unknown transaction.', [
+                'transactionId' => $transactionId,
+            ]);
+
+            return new Response('success');
+        }
+
+        try {
+            $paymentStatus = $sentooPaymentService->fetchTransactionStatus($transactionId);
+            $this->updatePaymentStatus($reservation, $paymentStatus['status'], $paymentStatus['message']);
+            $entityManager->flush();
+
+            $logger->info('Sentoo webhook updated a reservation payment status.', [
+                'reservationId' => $reservation->getId(),
+                'transactionId' => $transactionId,
+                'paymentStatus' => $paymentStatus['status'],
+            ]);
+
+            return new Response('success');
+        } catch (\Throwable $exception) {
+            $logger->error('Sentoo webhook could not update payment status.', [
+                'reservationId' => $reservation->getId(),
+                'transactionId' => $transactionId,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return new Response('Could not check payment status.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     #[Route('/reservations/{id}/payment/retry', name: 'app_payment_retry', methods: ['POST'])]
@@ -202,6 +261,7 @@ class ReservationController extends AbstractController
             Reservation::PAYMENT_REJECTED,
             Reservation::PAYMENT_CANCELLED,
             Reservation::PAYMENT_FAILED,
+            Reservation::PAYMENT_EXPIRED,
         ], true)) {
             $this->addFlash('warning', 'This payment cannot be restarted.');
 
@@ -311,6 +371,7 @@ class ReservationController extends AbstractController
             Reservation::PAYMENT_REJECTED,
             Reservation::PAYMENT_CANCELLED,
             Reservation::PAYMENT_FAILED,
+            Reservation::PAYMENT_EXPIRED,
         ], true)) {
             $reservation->setStatus(Reservation::STATUS_CANCELLED);
         }
@@ -449,6 +510,7 @@ class ReservationController extends AbstractController
             Reservation::PAYMENT_FAILED,
             Reservation::PAYMENT_REJECTED,
             Reservation::PAYMENT_CANCELLED,
+            Reservation::PAYMENT_EXPIRED,
         ], true)) {
             return false;
         }

@@ -27,6 +27,7 @@ class Reservation
     public const PAYMENT_REJECTED = 'rejected';
     public const PAYMENT_CANCELLED = 'cancelled';
     public const PAYMENT_FAILED = 'failed';
+    public const PAYMENT_EXPIRED = 'expired';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
