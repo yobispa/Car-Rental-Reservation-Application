@@ -1,0 +1,82 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Payment status{% endblock %}
+
+{% block body %}
+<main class="bg-light min-vh-100 py-5">
+    <div class="container">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                    <div>
+                        <span class="badge text-bg-primary mb-3">Reservation #{{ reservation.id }}</span>
+                        <h1 class="h3 mb-2">Payment status</h1>
+                        <p class="text-secondary mb-0">
+                            {{ reservation.car.make }} {{ reservation.car.model }}
+                            from {{ reservation.startDate|date('M j, Y') }}
+                            to {{ reservation.endDate|date('M j, Y') }}
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <div class="fs-4 fw-bold">${{ reservation.totalPrice|number_format(2) }}</div>
+                        <div class="small text-secondary">Total price</div>
+                    </div>
+                </div>
+
+                {% if reservation.paymentStatus == 'success' %}
+                    <div class="alert alert-success">
+                        Payment successful. Your reservation is confirmed.
+                    </div>
+                {% elseif reservation.paymentStatus in ['pending', 'issued'] %}
+                    <div class="alert alert-info">
+                        Your payment is still pending or processing. Please do not start another payment.
+                    </div>
+                {% elseif reservation.paymentStatus in ['rejected', 'cancelled', 'failed'] %}
+                    <div class="alert alert-warning">
+                        The payment was {{ reservation.paymentStatus }}.
+                        {% if reservation.paymentMessage %}
+                            <div class="mt-2">{{ reservation.paymentMessage }}</div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary">
+                        The payment has not started yet.
+                    </div>
+                {% endif %}
+
+                {% if attempt %}
+                    <p class="text-secondary small">
+                        Return URL attempt value: {{ attempt }}. The reservation status is checked with the Sentoo API, not with this URL value.
+                    </p>
+                {% endif %}
+
+                <dl class="row mb-4">
+                    <dt class="col-sm-3">Reservation status</dt>
+                    <dd class="col-sm-9">{{ reservation.status }}</dd>
+
+                    <dt class="col-sm-3">Payment status</dt>
+                    <dd class="col-sm-9">{{ reservation.paymentStatus }}</dd>
+
+                    <dt class="col-sm-3">Sentoo transaction</dt>
+                    <dd class="col-sm-9">{{ reservation.sentooTransactionId ?: 'Not created yet' }}</dd>
+                </dl>
+
+                <div class="d-flex flex-column flex-sm-row gap-2 justify-content-end">
+                    <a href="{{ path('app_quest') }}" class="btn btn-outline-secondary">Back to vehicles</a>
+
+                    {% if reservation.paymentStatus in ['pending', 'issued'] and reservation.sentooPaymentUrl %}
+                        <a href="{{ reservation.sentooPaymentUrl }}" class="btn btn-primary">Continue payment</a>
+                    {% endif %}
+
+                    {% if reservation.paymentStatus in ['rejected', 'cancelled', 'failed'] %}
+                        <form method="post" action="{{ path('app_payment_retry', { id: reservation.id }) }}">
+                            <input type="hidden" name="_token" value="{{ csrf_token('retry_payment_' ~ reservation.id) }}">
+                            <button type="submit" class="btn btn-primary">Try payment again</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}

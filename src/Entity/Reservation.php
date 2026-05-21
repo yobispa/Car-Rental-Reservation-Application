@@ -20,6 +20,14 @@ class Reservation
     public const STATUS_CANCELLED = 'CANCELLED';
     public const STATUS_COMPLETED = 'COMPLETED';
 
+    public const PAYMENT_NOT_STARTED = 'not_started';
+    public const PAYMENT_ISSUED = 'issued';
+    public const PAYMENT_PENDING = 'pending';
+    public const PAYMENT_SUCCESS = 'success';
+    public const PAYMENT_REJECTED = 'rejected';
+    public const PAYMENT_CANCELLED = 'cancelled';
+    public const PAYMENT_FAILED = 'failed';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -60,6 +68,24 @@ class Reservation
 
     #[ORM\Column]
     private \DateTimeImmutable $createdAt;
+
+    #[ORM\Column(length: 20)]
+    private string $paymentStatus = self::PAYMENT_NOT_STARTED;
+
+    #[ORM\Column(length: 100, nullable: true)]
+    private ?string $sentooTransactionId = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $sentooPaymentUrl = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $sentooQrCodeUrl = null;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $paymentMessage = null;
+
+    #[ORM\Column(type: 'decimal', precision: 10, scale: 2, nullable: true)]
+    private ?string $totalPrice = null;
 
     public function __construct()
     {
@@ -172,6 +198,78 @@ class Reservation
     public function setCreatedAt(\DateTimeImmutable $createdAt): static
     {
         $this->createdAt = $createdAt;
+
+        return $this;
+    }
+
+    public function getPaymentStatus(): string
+    {
+        return $this->paymentStatus;
+    }
+
+    public function setPaymentStatus(string $paymentStatus): static
+    {
+        $this->paymentStatus = $paymentStatus;
+
+        return $this;
+    }
+
+    public function getSentooTransactionId(): ?string
+    {
+        return $this->sentooTransactionId;
+    }
+
+    public function setSentooTransactionId(?string $sentooTransactionId): static
+    {
+        $this->sentooTransactionId = $sentooTransactionId;
+
+        return $this;
+    }
+
+    public function getSentooPaymentUrl(): ?string
+    {
+        return $this->sentooPaymentUrl;
+    }
+
+    public function setSentooPaymentUrl(?string $sentooPaymentUrl): static
+    {
+        $this->sentooPaymentUrl = $sentooPaymentUrl;
+
+        return $this;
+    }
+
+    public function getSentooQrCodeUrl(): ?string
+    {
+        return $this->sentooQrCodeUrl;
+    }
+
+    public function setSentooQrCodeUrl(?string $sentooQrCodeUrl): static
+    {
+        $this->sentooQrCodeUrl = $sentooQrCodeUrl;
+
+        return $this;
+    }
+
+    public function getPaymentMessage(): ?string
+    {
+        return $this->paymentMessage;
+    }
+
+    public function setPaymentMessage(?string $paymentMessage): static
+    {
+        $this->paymentMessage = $paymentMessage;
+
+        return $this;
+    }
+
+    public function getTotalPrice(): ?string
+    {
+        return $this->totalPrice;
+    }
+
+    public function setTotalPrice(?string $totalPrice): static
+    {
+        $this->totalPrice = $totalPrice;
 
         return $this;
     }

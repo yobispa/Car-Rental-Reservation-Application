@@ -9,11 +9,13 @@ use App\Entity\User;
 use App\Form\ReservationType;
 use App\Repository\CarRepository;
 use App\Repository\ReservationRepository;
+use App\Service\SentooPaymentService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 class ReservationController extends AbstractController
 {
@@ -58,7 +60,9 @@ class ReservationController extends AbstractController
         Car $car,
         Request $request,
         EntityManagerInterface $entityManager,
-        ReservationRepository $reservationRepository
+        ReservationRepository $reservationRepository,
+        CarRepository $carRepository,
+        SentooPaymentService $sentooPaymentService
     ): Response
     {
         $reservation = (new Reservation())
@@ -70,15 +74,18 @@ class ReservationController extends AbstractController
         if ($form->isSubmitted() && $form->isValid()) {
             $reservation = $form->getData();
             $reservation->setCar($car);
+            $reservations = $reservationRepository->findAll();
 
-            if (!$this->isCarAvailable($car, $reservationRepository->findAll(), $reservation)) {
-                $this->addFlash('warning', 'This car is already reserved for those dates. Please choose another date or use Smart Match.');
-
+            if (!$this->isCarAvailable($car, $reservations, $reservation)) {
                 return $this->render('reservation/new.html.twig', [
                     'car' => $car,
                     'reservationForm' => $form,
+                    'availabilityError' => 'This car is already reserved for those dates. Please choose another date or use Smart Match.',
                 ]);
             }
+
+            $availableOptions = $this->findAvailableCars($carRepository->findAll(), $reservations, $reservation);
+            $totalPrice = $this->findTotalPriceForCar($car, $availableOptions);
 
             $customer = (new Customer())
                 ->setFirstName($form->get('customerFirstName')->getData())
@@ -87,6 +94,7 @@ class ReservationController extends AbstractController
                 ->setPhone($form->get('customerPhone')->getData());
 
             $reservation->setCustomer($customer);
+            $reservation->setTotalPrice(number_format($totalPrice, 2, '.', ''));
 
             $user = $this->getUser();
             if ($user instanceof User) {
@@ -97,16 +105,134 @@ class ReservationController extends AbstractController
             $entityManager->persist($reservation);
             $entityManager->flush();
 
-            $this->addFlash('success', 'Your reservation request has been saved.');
+            try {
+                $returnUrl = $this->getPaymentReturnUrl($reservation, $sentooPaymentService);
 
-            return $this->redirectToRoute('app_quest');
+                $payment = $sentooPaymentService->createTransaction($reservation, $totalPrice, $returnUrl);
+
+                $reservation
+                    ->setStatus(Reservation::STATUS_PENDING)
+                    ->setPaymentStatus(Reservation::PAYMENT_ISSUED)
+                    ->setSentooTransactionId($payment['transactionId'])
+                    ->setSentooPaymentUrl($payment['paymentUrl'])
+                    ->setSentooQrCodeUrl($payment['qrCodeUrl'])
+                    ->setPaymentMessage(null);
+
+                $entityManager->flush();
+
+                return $this->redirect($payment['paymentUrl']);
+            } catch (\Throwable $exception) {
+                $reservation
+                    ->setStatus(Reservation::STATUS_CANCELLED)
+                    ->setPaymentStatus(Reservation::PAYMENT_FAILED)
+                    ->setPaymentMessage($exception->getMessage());
+
+                $entityManager->flush();
+
+                $this->addFlash('danger', 'The reservation was saved, but the payment could not be started.');
+
+                return $this->redirectToRoute('app_payment_show', [
+                    'id' => $reservation->getId(),
+                ]);
+            }
         }
 
         return $this->render('reservation/new.html.twig', [
             'car' => $car,
             'reservationForm' => $form,
+            'availabilityError' => null,
         ]);
     }
+
+    #[Route('/reservations/{id}/payment', name: 'app_payment_show', methods: ['GET'])]
+    public function paymentShow(Reservation $reservation): Response
+    {
+        return $this->render('payment/show.html.twig', [
+            'reservation' => $reservation,
+            'attempt' => null,
+        ]);
+    }
+
+    #[Route('/payment/return/{id}', name: 'app_payment_return', methods: ['GET'])]
+    public function paymentReturn(
+        Reservation $reservation,
+        Request $request,
+        EntityManagerInterface $entityManager,
+        SentooPaymentService $sentooPaymentService
+    ): Response
+    {
+        if ($reservation->getSentooTransactionId()) {
+            try {
+                $paymentStatus = $sentooPaymentService->fetchTransactionStatus($reservation->getSentooTransactionId());
+                $this->updatePaymentStatus($reservation, $paymentStatus['status'], $paymentStatus['message']);
+                $entityManager->flush();
+            } catch (\Throwable $exception) {
+                $this->addFlash('danger', 'Could not check the payment status right now.');
+            }
+        }
+
+        return $this->render('payment/show.html.twig', [
+            'reservation' => $reservation,
+            'attempt' => $request->query->get('attempt'),
+        ]);
+    }
+
+    #[Route('/reservations/{id}/payment/retry', name: 'app_payment_retry', methods: ['POST'])]
+    public function paymentRetry(
+        Reservation $reservation,
+        Request $request,
+        EntityManagerInterface $entityManager,
+        SentooPaymentService $sentooPaymentService
+    ): Response
+    {
+        if (!$this->isCsrfTokenValid('retry_payment_' . $reservation->getId(), $request->request->get('_token'))) {
+            throw $this->createAccessDeniedException();
+        }
+
+        if (!in_array($reservation->getPaymentStatus(), [
+            Reservation::PAYMENT_REJECTED,
+            Reservation::PAYMENT_CANCELLED,
+            Reservation::PAYMENT_FAILED,
+        ], true)) {
+            $this->addFlash('warning', 'This payment cannot be restarted.');
+
+            return $this->redirectToRoute('app_payment_show', [
+                'id' => $reservation->getId(),
+            ]);
+        }
+
+        try {
+            $returnUrl = $this->getPaymentReturnUrl($reservation, $sentooPaymentService);
+
+            $payment = $sentooPaymentService->createTransaction($reservation, (float) $reservation->getTotalPrice(), $returnUrl);
+
+            $reservation
+                ->setStatus(Reservation::STATUS_PENDING)
+                ->setPaymentStatus(Reservation::PAYMENT_ISSUED)
+                ->setSentooTransactionId($payment['transactionId'])
+                ->setSentooPaymentUrl($payment['paymentUrl'])
+                ->setSentooQrCodeUrl($payment['qrCodeUrl'])
+                ->setPaymentMessage(null);
+
+            $entityManager->flush();
+
+            return $this->redirect($payment['paymentUrl']);
+        } catch (\Throwable $exception) {
+            $reservation
+                ->setStatus(Reservation::STATUS_CANCELLED)
+                ->setPaymentStatus(Reservation::PAYMENT_FAILED)
+                ->setPaymentMessage($exception->getMessage());
+
+            $entityManager->flush();
+
+            $this->addFlash('danger', 'The payment could not be restarted.');
+
+            return $this->redirectToRoute('app_payment_show', [
+                'id' => $reservation->getId(),
+            ]);
+        }
+    }
+
     // AI helped with these private methods and algorithms.
     private function findAvailableCars(array $cars, array $reservations, Reservation $reservation): array
     {
@@ -142,6 +268,45 @@ class ReservationController extends AbstractController
         return $availableCarsWithPrices;
     }
 
+    private function getPaymentReturnUrl(Reservation $reservation, SentooPaymentService $sentooPaymentService): string
+    {
+        $defaultReturnUrl = $this->generateUrl('app_payment_return', [
+            'id' => $reservation->getId(),
+        ], UrlGeneratorInterface::ABSOLUTE_URL) . '?attempt=';
+
+        return $sentooPaymentService->getReturnUrl($reservation, $defaultReturnUrl);
+    }
+
+    private function findTotalPriceForCar(Car $car, array $availableOptions): float
+    {
+        foreach ($availableOptions as $option) {
+            if ($option['car']->getId() === $car->getId()) {
+                return $option['totalPrice'];
+            }
+        }
+
+        return 0;
+    }
+
+    private function updatePaymentStatus(Reservation $reservation, string $sentooStatus, ?string $message): void
+    {
+        $reservation
+            ->setPaymentStatus($sentooStatus)
+            ->setPaymentMessage($message);
+
+        if ($sentooStatus === Reservation::PAYMENT_SUCCESS) {
+            $reservation->setStatus(Reservation::STATUS_CONFIRMED);
+        }
+
+        if (in_array($sentooStatus, [
+            Reservation::PAYMENT_REJECTED,
+            Reservation::PAYMENT_CANCELLED,
+            Reservation::PAYMENT_FAILED,
+        ], true)) {
+            $reservation->setStatus(Reservation::STATUS_CANCELLED);
+        }
+    }
+
     private function isCarAvailable(Car $car, array $reservations, Reservation $requestedReservation): bool
     {
         foreach ($reservations as $reservation) {
@@ -149,7 +314,7 @@ class ReservationController extends AbstractController
                 continue;
             }
 
-            if (in_array($reservation->getStatus(), [Reservation::STATUS_CANCELLED, Reservation::STATUS_COMPLETED], true)) {
+            if (!$this->doesReservationBlockCar($reservation)) {
                 continue;
             }
 
@@ -228,7 +393,7 @@ class ReservationController extends AbstractController
         $demandCount = 0;
 
         foreach ($reservations as $reservation) {
-            if (in_array($reservation->getStatus(), [Reservation::STATUS_CANCELLED, Reservation::STATUS_COMPLETED], true)) {
+            if (!$this->doesReservationBlockCar($reservation)) {
                 continue;
             }
 
@@ -241,6 +406,24 @@ class ReservationController extends AbstractController
         }
 
         return $demandCount;
+    }
+
+    private function doesReservationBlockCar(Reservation $reservation): bool
+    {
+        if (in_array($reservation->getStatus(), [Reservation::STATUS_CANCELLED, Reservation::STATUS_COMPLETED], true)) {
+            return false;
+        }
+
+        if (in_array($reservation->getPaymentStatus(), [
+            Reservation::PAYMENT_NOT_STARTED,
+            Reservation::PAYMENT_FAILED,
+            Reservation::PAYMENT_REJECTED,
+            Reservation::PAYMENT_CANCELLED,
+        ], true)) {
+            return false;
+        }
+
+        return true;
     }
 
     private function findAlternativeDates(array $cars, array $reservations, Reservation $reservation): array

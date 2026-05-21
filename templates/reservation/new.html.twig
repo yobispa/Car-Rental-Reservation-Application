@@ -69,8 +69,14 @@
                             </p>
                         </div>
 
-                        {{ form_start(reservationForm) }}
+                        {{ form_start(reservationForm, { attr: { 'data-turbo': 'false' } }) }}
                             {{ form_errors(reservationForm) }}
+
+                            {% if availabilityError %}
+                                <div class="alert alert-warning">
+                                    {{ availabilityError }}
+                                </div>
+                            {% endif %}
 
                             <div class="row g-3">
                                 <div class="col-md-6">
