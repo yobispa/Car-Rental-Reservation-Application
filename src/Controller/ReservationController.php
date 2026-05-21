@@ -75,12 +75,21 @@ class ReservationController extends AbstractController
             $reservation = $form->getData();
             $reservation->setCar($car);
             $reservations = $reservationRepository->findAll();
+            $customerEmail = $form->get('customerEmail')->getData();
 
             if (!$this->isCarAvailable($car, $reservations, $reservation)) {
                 return $this->render('reservation/new.html.twig', [
                     'car' => $car,
                     'reservationForm' => $form,
                     'availabilityError' => 'This car is already reserved for those dates. Please choose another date or use Smart Match.',
+                ]);
+            }
+
+            if (!$this->canCustomerRentAgain($reservations, $customerEmail, $reservation)) {
+                return $this->render('reservation/new.html.twig', [
+                    'car' => $car,
+                    'reservationForm' => $form,
+                    'availabilityError' => 'You can only rent a car once every 5 days.',
                 ]);
             }
 
@@ -267,7 +276,7 @@ class ReservationController extends AbstractController
 
         return $availableCarsWithPrices;
     }
-
+    
     private function getPaymentReturnUrl(Reservation $reservation, SentooPaymentService $sentooPaymentService): string
     {
         $defaultReturnUrl = $this->generateUrl('app_payment_return', [
@@ -322,6 +331,27 @@ class ReservationController extends AbstractController
                 $reservation->getStartDate() < $requestedReservation->getEndDate()
                 && $reservation->getEndDate() > $requestedReservation->getStartDate()
             ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function canCustomerRentAgain(array $reservations, string $email, Reservation $newReservation): bool
+    {
+        foreach ($reservations as $reservation) {
+            if ($reservation->getCustomer()?->getEmail() !== $email) {
+                continue;
+            }
+
+            if (!$this->doesReservationBlockCar($reservation)) {
+                continue;
+            }
+
+            $nextAllowedDate = $reservation->getEndDate()->modify('+5 days');
+
+            if ($newReservation->getStartDate() < $nextAllowedDate) {
                 return false;
             }
         }
