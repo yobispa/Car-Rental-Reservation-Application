@@ -153,7 +153,7 @@ class ReservationController extends AbstractController
             'availabilityError' => null,
         ]);
     }
-
+     //AI helped me with webhooks and payment integration because I dont know alot of payment integrations
     #[Route('/reservations/{id}/payment', name: 'app_payment_show', methods: ['GET'])]
     public function paymentShow(Reservation $reservation): Response
     {
