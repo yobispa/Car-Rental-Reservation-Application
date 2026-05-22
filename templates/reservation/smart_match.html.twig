@@ -1,7 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% block title %}Smart Match{% endblock %}
-{# ai helped with the UI design #}
+{# AI helped with the UI design #}
 {% block body %}
 <main class="bg-light min-vh-100 py-5">
     <div class="container">
@@ -95,7 +95,12 @@
                                         </div>
                                     </div>
                                     <a
-                                        href="{{ path('app_reservation_new', { id: car.id }) }}"
+                                        href="{{ path('app_reservation_new', {
+                                            id: car.id,
+                                            numberOfPersons: search.numberOfPersons,
+                                            startDate: search.startDate,
+                                            endDate: search.endDate
+                                        }) }}"
                                         class="btn btn-primary"
                                     >
                                         Reserve this car

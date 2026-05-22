@@ -1,0 +1,3 @@
+services:
+    App\Service\SentooPaymentService:
+        class: App\Tests\Fake\FakeSentooPaymentService

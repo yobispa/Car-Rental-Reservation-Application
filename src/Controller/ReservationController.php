@@ -63,11 +63,23 @@ class ReservationController extends AbstractController
         EntityManagerInterface $entityManager,
         ReservationRepository $reservationRepository,
         CarRepository $carRepository,
-        SentooPaymentService $sentooPaymentService
-    ): Response
-    {
+        SentooPaymentService $sentooPaymentService,
+        LoggerInterface $logger
+    ): Response {
         $reservation = (new Reservation())
             ->setCar($car);
+
+        if ($request->query->get('numberOfPersons')) {
+            $reservation->setNumberOfPersons((int) $request->query->get('numberOfPersons'));
+        }
+
+        if ($request->query->get('startDate')) {
+            $reservation->setStartDate(new \DateTimeImmutable($request->query->get('startDate')));
+        }
+
+        if ($request->query->get('endDate')) {
+            $reservation->setEndDate(new \DateTimeImmutable($request->query->get('endDate')));
+        }
 
         $form = $this->createForm(ReservationType::class, $reservation);
         $form->handleRequest($request);
@@ -115,6 +127,12 @@ class ReservationController extends AbstractController
             $entityManager->persist($reservation);
             $entityManager->flush();
 
+            $logger->info('Reservation saved and payment will be created.', [
+                'reservationId' => $reservation->getId(),
+                'carId' => $car->getId(),
+                'totalPrice' => $reservation->getTotalPrice(),
+            ]);
+
             try {
                 $returnUrl = $this->getPaymentReturnUrl($reservation, $sentooPaymentService);
 
@@ -130,6 +148,11 @@ class ReservationController extends AbstractController
 
                 $entityManager->flush();
 
+                $logger->info('Sentoo payment created for reservation.', [
+                    'reservationId' => $reservation->getId(),
+                    'transactionId' => $payment['transactionId'],
+                ]);
+
                 return $this->redirect($payment['paymentUrl']);
             } catch (\Throwable $exception) {
                 $reservation
@@ -138,6 +161,11 @@ class ReservationController extends AbstractController
                     ->setPaymentMessage($exception->getMessage());
 
                 $entityManager->flush();
+
+                $logger->error('Sentoo payment could not be started.', [
+                    'reservationId' => $reservation->getId(),
+                    'error' => $exception->getMessage(),
+                ]);
 
                 $this->addFlash('danger', 'The reservation was saved, but the payment could not be started.');
 
@@ -153,7 +181,8 @@ class ReservationController extends AbstractController
             'availabilityError' => null,
         ]);
     }
-     //AI helped me with webhooks and payment integration because I dont know alot of payment integrations
+
+    // AI helped me with the Sentoo payment and webhook part because I do not know a lot about payment integrations.
     #[Route('/reservations/{id}/payment', name: 'app_payment_show', methods: ['GET'])]
     public function paymentShow(Reservation $reservation): Response
     {
@@ -177,6 +206,11 @@ class ReservationController extends AbstractController
                 $paymentStatus = $sentooPaymentService->fetchTransactionStatus($reservation->getSentooTransactionId());
                 $this->updatePaymentStatus($reservation, $paymentStatus['status'], $paymentStatus['message']);
                 $entityManager->flush();
+
+                $logger->info('Sentoo return checked payment status.', [
+                    'reservationId' => $reservation->getId(),
+                    'paymentStatus' => $paymentStatus['status'],
+                ]);
             } catch (\Throwable $exception) {
                 $logger->error('Could not check Sentoo payment status after return.', [
                     'reservationId' => $reservation->getId(),
@@ -250,7 +284,8 @@ class ReservationController extends AbstractController
         Reservation $reservation,
         Request $request,
         EntityManagerInterface $entityManager,
-        SentooPaymentService $sentooPaymentService
+        SentooPaymentService $sentooPaymentService,
+        LoggerInterface $logger
     ): Response
     {
         if (!$this->isCsrfTokenValid('retry_payment_' . $reservation->getId(), $request->request->get('_token'))) {
@@ -285,6 +320,11 @@ class ReservationController extends AbstractController
 
             $entityManager->flush();
 
+            $logger->info('Sentoo payment retry created for reservation.', [
+                'reservationId' => $reservation->getId(),
+                'transactionId' => $payment['transactionId'],
+            ]);
+
             return $this->redirect($payment['paymentUrl']);
         } catch (\Throwable $exception) {
             $reservation
@@ -294,6 +334,11 @@ class ReservationController extends AbstractController
 
             $entityManager->flush();
 
+            $logger->error('Sentoo payment retry failed.', [
+                'reservationId' => $reservation->getId(),
+                'error' => $exception->getMessage(),
+            ]);
+
             $this->addFlash('danger', 'The payment could not be restarted.');
 
             return $this->redirectToRoute('app_payment_show', [
@@ -302,7 +347,7 @@ class ReservationController extends AbstractController
         }
     }
 
-    // AI helped with these private methods and algorithms.
+    // AI helped me with these helper functions for availability, price calculation, and alternative dates.
     private function findAvailableCars(array $cars, array $reservations, Reservation $reservation): array
     {
         $availableCars = [];
@@ -388,10 +433,7 @@ class ReservationController extends AbstractController
                 continue;
             }
 
-            if (
-                $reservation->getStartDate() < $requestedReservation->getEndDate()
-                && $reservation->getEndDate() > $requestedReservation->getStartDate()
-            ) {
+            if ($reservation->getStartDate() < $requestedReservation->getEndDate() && $reservation->getEndDate() > $requestedReservation->getStartDate()) {
                 return false;
             }
         }
@@ -420,7 +462,7 @@ class ReservationController extends AbstractController
         return true;
     }
 
-    private function calculatePrice(Car $car, Reservation $reservation, int $demandCount, int $availableCarsCount): float
+    public function calculatePrice(Car $car, Reservation $reservation, int $demandCount, int $availableCarsCount): float
     {
         $month = (int) $reservation->getStartDate()->format('n');
         $price = $this->calculateBasePrice($car, $reservation);
@@ -444,14 +486,14 @@ class ReservationController extends AbstractController
         return round($price, 2);
     }
 
-    private function calculateBasePrice(Car $car, Reservation $reservation): float
+    public function calculateBasePrice(Car $car, Reservation $reservation): float
     {
         $rentalDays = $reservation->getRentalDays() ?? 1;
 
         return (float) $car->getDailyBasePrice() * $rentalDays;
     }
 
-    private function getPriceIncreaseText(Reservation $reservation, int $demandCount, int $availableCarsCount): string
+    public function getPriceIncreaseText(Reservation $reservation, int $demandCount, int $availableCarsCount): string
     {
         $month = (int) $reservation->getStartDate()->format('n');
         $priceIncreases = [];

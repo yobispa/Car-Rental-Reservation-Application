@@ -1,8 +1,7 @@
 <?php
 
 namespace App\Controller;
-use Doctrine\ORM\EntityManagerInterface;
-use App\Entity\Car;
+
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -10,12 +9,8 @@ use Symfony\Component\Routing\Attribute\Route;
 final class QuestController extends AbstractController
 {
     #[Route('/', name: 'app_quest')]
-    public function index(EntityManagerInterface $entityManager): Response
+    public function index(): Response
     {
-        $cars = $entityManager->getRepository(Car::class)->findAll();
-
-        return $this->render('quest/index.html.twig', [
-            'cars' => $cars
-        ]);
+        return $this->render('quest/index.html.twig');
     }
 }
